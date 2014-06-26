@@ -1,6 +1,24 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 from openpyxl import Workbook
 from openpyxl import load_workbook
 import re
+import sys
+
+files = [
+    "Chinavitae_1_500.xlsm",
+    "Chinavitae_501_1000.xlsm",
+    "Chinavitae_1001_1500.xlsm",
+    "Chinavitae_1501_2000.xlsm",
+    "Chinavitae_2001_2500.xlsm",
+    "Chinavitae_2501_3000.xlsm",
+    "Chinavitae_3001_3500.xlsm",
+    "Chinavitae_3501_4000.xlsm",
+    "Chinavitae_4001_4509.xlsm"
+]
+
+
 
 dot = u'\u00b7'
 dash = u'\u2014'
@@ -44,8 +62,11 @@ def split_ch_name(chName):
         chLastName = chName[2:]
     else:
         cleanName = get_clean_ch_name(chName)
-        print u' '.join(cleanName.split())
-        chFirstName, chLastName = cleanName.split()[:2]
+        nameParts = cleanName.split()
+        print u' '.join(nameParts)
+        if len(nameParts) < 2:
+            return nameParts[0], None
+        chFirstName, chLastName = nameParts[:2]
     return chFirstName, chLastName
 
 
@@ -53,7 +74,7 @@ def split_eng_name(engName):
     nameParts = engName.split()
     if len(nameParts) < 2:
         return nameParts[0], None
-    engFirstName, engLastName = engName.split()[:2]
+    engFirstName, engLastName = nameParts[:2]
     return engFirstName, engLastName
 
 
@@ -87,138 +108,161 @@ def guess_travel(line):
     return nature
 
 
-# input workbook
-inwb = load_workbook('Chinavitae_1_500.xlsm')
+def main():
+    if sys.argv[1] and sys.argv[1].isdigit():
+        filename = files[int(sys.argv[1])]
+    else:
+        return
 
-# output workbook
-outwb = Workbook()
+    # input workbook
+    print "loading", filename, "......."
+    inwb = load_workbook(filename)
 
-# create sheets and heads
-travelSheet = outwb.create_sheet(0, 'travel')
-travelSheet.append(('IndividualID', 'Date', 'Type', 'Description', 'Nature'))
+    # output workbook
+    outwb = Workbook()
+
+    # create sheets and heads
+    travelSheet = outwb.create_sheet(0, 'travel')
+    travelSheet.append(('IndividualID', 'Date', 'Type', 'Description', 'Nature'))
 
 
-careerSheet = outwb.create_sheet(0, 'career')
-careerSheet.append(('IndividualID', 'Derived', 'Date', 'SourceInformation',
-    'RoleTitle', 'EntityName', 'Comments'))
+    careerSheet = outwb.create_sheet(0, 'career')
+    careerSheet.append(('IndividualID', 'Derived', 'Date', 'SourceInformation',
+        'RoleTitle', 'EntityName', 'Comments'))
 
-infoSheet = outwb.create_sheet(0, 'info')
-infoSheet.append(('BioLastRevised', 'CareerLastUpdate', 
-    'ChineseName', 'EnglishFirstName', 'EnglishLastName', 'ChineseFirstName',
-    'ChineseLastName', 'YearOfBirth', 'BirthPlace', 'Gender', 'Nationality', 'Biography'))
+    infoSheet = outwb.create_sheet(0, 'info')
+    infoSheet.append(('BioLastRevised', 'CareerLastUpdate', 
+        'ChineseName', 'EnglishFirstName', 'EnglishLastName', 'ChineseFirstName',
+        'ChineseLastName', 'YearOfBirth', 'BirthPlace', 'Gender', 'Nationality', 'Biography'))
 
-for sheetName in inwb.get_sheet_names():
-    if not sheetName.isdigit():
-        continue
-    sheet = inwb[sheetName]
-    print "------------------------------------------------------"
-    print "Processing sheet", sheetName, "........"
-    print ' '
+    for sheetName in inwb.get_sheet_names():
+        if not sheetName.isdigit():
+            continue
+        sheet = inwb[sheetName]
+        print "------------------------------------------------------"
+        print "Processing sheet", sheetName, "........"
+        print ' '
 
-    if len(sheet.columns) < 2:
-        continue
+        if len(sheet.columns) < 2:
+            continue
 
-    colA, colB = sheet.columns[:2]
+        colA, colB = sheet.columns[:2]
 
-    if len(sheet.columns) <= 2:
-        alen = len(colA)
-        for i in range(1, alen):
-            sheet.cell('C%s'%(i)).value = None
+        if len(sheet.columns) <= 2:
+            alen = len(colA)
+            for i in range(1, alen):
+                sheet.cell('C%s'%(i)).value = None
 
-    colC = sheet.columns[2]
-    
-    revisedTime = updatedTime = birthYear = engName = chName = None
-    birthPlace = bioLineIdx = careerIdx = travelIdx = compIdx = None
-    engFirstName = engLastName = chFirstName = chLastName = None
-    bioLine = gender = nationality = None
+        colC = sheet.columns[2]
+        
+        revisedTime = updatedTime = birthYear = engName = chName = None
+        birthPlace = bioLineIdx = careerIdx = travelIdx = compIdx = None
+        engFirstName = engLastName = chFirstName = chLastName = None
+        bioLine = gender = nationality = None
 
-    # process column A to get all available fields and indexes
-    for idx, cell in enumerate(colA):
-        if unicode(cell.value).startswith(u'Biography Revised:'):
-            revisedTime = cell.value.partition(':')[-1].strip()
-        if unicode(cell.value).startswith(u'Career Data Updated:'):
-            updatedTime = cell.value.partition(':')[-1].strip()
-        if unicode(cell.value).startswith(u'Born:'):
-            birthYear = cell.value.partition(':')[-1].strip()
-        if unicode(cell.value).startswith(u'PHOTO:'):
-            engName, chName = split_name(colA[idx+1].value)
-        if unicode(cell.value).startswith(u'Birthplace:'):
-            birthPlace = cell.value.partition(':')[-1].strip()
-        if unicode(cell.value) == u'Biography':
-            bioLineIdx = idx
-        if unicode(cell.value) == u'Career Data':
-            careerIdx = idx
-        if unicode(cell.value).startswith(u'Recent Travel'):
-            travelIdx = idx
-        if unicode(cell.value) == u'Compare':
-            compIdx = idx
+        # process column A to get all available fields and indexes
+        for idx, cell in enumerate(colA):
+            if unicode(cell.value).startswith(u'Biography Revised:'):
+                revisedTime = cell.value.partition(':')[-1].strip()
+            if unicode(cell.value).startswith(u'Career Data Updated:'):
+                updatedTime = cell.value.partition(':')[-1].strip()
+            if unicode(cell.value).startswith(u'Born:'):
+                birthYear = cell.value.partition(':')[-1].strip()
+            if unicode(cell.value).startswith(u'PHOTO:'):
+                engName, chName = split_name(colA[idx+1].value)
+            if unicode(cell.value).startswith(u'Birthplace:'):
+                birthPlace = cell.value.partition(':')[-1].strip()
+            if unicode(cell.value) == u'Biography':
+                bioLineIdx = idx
+            if unicode(cell.value) == u'Career Data':
+                careerIdx = idx
+            if unicode(cell.value).startswith(u'Recent Travel'):
+                travelIdx = idx
+            if unicode(cell.value) == u'Compare':
+                compIdx = idx
 
-    # english name
-    if engName:
-        engFirstName, engLastName = split_eng_name(engName)
+        # english name
+        if engName:
+            engFirstName, engLastName = split_eng_name(engName)
 
-    # chinese name
-    if chName:
-        chFirstName, chLastName = split_ch_name(chName)
+        # chinese name
+        if chName:
+            chFirstName, chLastName = split_ch_name(chName)
 
-    # biography
-    if bioLineIdx:
-        bioLine = colA[bioLineIdx+2].value
-        gender, nationality = guess_bio(bioLine)
+        # biography
+        if bioLineIdx:
+            bioLine = colA[bioLineIdx+2].value
+            if not bioLine:
+                bioLine = ''
+            else:
+                bioLine = unicode(bioLine)
+            i = 3
+            nextLine = colA[bioLineIdx+i].value
+            while nextLine != 'Career Data' and nextLine != 'Recent Travel':
+                if nextLine:
+                    bioLine += ' ' + unicode(nextLine)
+                i = i + 1
+                nextLine = colA[bioLineIdx+i].value
+            gender, nationality = guess_bio(bioLine)
 
-    cv = {
-            'revisedTime': revisedTime, 
-            'updatedTime': updatedTime, 
-            'chName': chName, 
-            'engFirstName': engFirstName, 
-            'engLastName': engLastName, 
-            'chFirstName': chFirstName, 
-            'chLastName': chLastName, 
-            'birthYear': birthYear, 
-            'birthPlace': birthPlace, 
-            'gender': gender, 
-            'nationality': nationality, 
-            'bioLine': bioLine, 
-            'id': sheetName
-        }
+        cv = {
+                'revisedTime': revisedTime, 
+                'updatedTime': updatedTime, 
+                'chName': chName, 
+                'engFirstName': engFirstName, 
+                'engLastName': engLastName, 
+                'chFirstName': chFirstName, 
+                'chLastName': chLastName, 
+                'birthYear': birthYear, 
+                'birthPlace': birthPlace, 
+                'gender': gender, 
+                'nationality': nationality, 
+                'bioLine': bioLine, 
+                'id': sheetName
+            }
 
-    name = get_clean_ch_name(chName) if chName else engName
-    infoSheet.append((cv['revisedTime'], cv['updatedTime'], 
-        cv['chName'], cv['engFirstName'], cv['engLastName'], cv['chFirstName'],
-        cv['chLastName'], cv['birthYear'], cv['birthPlace'], cv['gender'],
-        cv['nationality'], cv['bioLine']))
-    print "Insert profile for", cv['id'], name
+        name = get_clean_ch_name(chName) if chName else engName
+        infoSheet.append((cv['revisedTime'], cv['updatedTime'], 
+            cv['chName'], cv['engFirstName'], cv['engLastName'], cv['chFirstName'],
+            cv['chLastName'], cv['birthYear'], cv['birthPlace'], cv['gender'],
+            cv['nationality'], cv['bioLine']))
+        print "Insert profile for", cv['id'], name
 
-    if careerIdx:
+        if careerIdx:
+            if travelIdx:
+                print "careerIdx, travelIdx", careerIdx, travelIdx
+                cv['careerData'] = [(colA[i].value, colB[i].value, colC[i].value) for i in range(careerIdx+2, travelIdx-1)]
+            else:
+                print "careerIdx, compIdx", careerIdx, compIdx
+                cv['careerData'] = [(colA[i].value, colB[i].value, colC[i].value) for i in range(careerIdx+2, compIdx)]
+            for idx, line in enumerate(cv['careerData']):
+                if not line[0] and not line[1] and not line[2]:
+                    continue
+                role, entity = guess_career(line)
+                # print ' | '.join(unicode(i) for i in (cv['id'], None, line[0], line[1], role, entity, line[2]))
+                careerSheet.append((cv['id'], None, line[0], line[1], 
+                    role, entity, line[2]))
+            print "Inserted career data for", cv['id'], name
+
         if travelIdx:
-            print "careerIdx, travelIdx", careerIdx, travelIdx
-            cv['careerData'] = [(colA[i].value, colB[i].value, colC[i].value) for i in range(careerIdx+2, travelIdx-1)]
-        else:
-            print "careerIdx, compIdx", careerIdx, compIdx
-            cv['careerData'] = [(colA[i].value, colB[i].value, colC[i].value) for i in range(careerIdx+2, compIdx)]
-        for idx, line in enumerate(cv['careerData']):
-            if not line[0] and not line[1] and not line[2]:
-                continue
-            role, entity = guess_career(line)
-            # print ' | '.join(unicode(i) for i in (cv['id'], None, line[0], line[1], role, entity, line[2]))
-            careerSheet.append((cv['id'], None, line[0], line[1], 
-                role, entity, line[2]))
-        print "Inserted career data for", cv['id'], name
+            cv['travelData'] = [[colA[i].value, colB[i].value, colC[i].value] for i in range(travelIdx+2, compIdx)]
+            for idx, line in enumerate(cv['travelData']):
+                if not line[0] and not line[1] and not line[2]:
+                    continue
+                if type(line[0]) is unicode:
+                    break
+                nature = guess_travel(line)
+                if not line[0]:
+                    line[0] = cv['travelData'][idx-1][0] if idx > 0 else None
+                if not line[1]:
+                    line[1] = cv['travelData'][idx-1][1] if idx > 0 else None
+                # print ' | '.join(unicode(i) for i in (cv['id'], line[0], line[1], line[2], nature))
+                travelSheet.append((cv['id'], line[0], line[1], line[2], nature))
+            print "Inserted travel data for", cv['id'], name
 
-    if travelIdx:
-        cv['travelData'] = [[colA[i].value, colB[i].value, colC[i].value] for i in range(travelIdx+2, compIdx)]
-        for idx, line in enumerate(cv['travelData']):
-            if not line[0] and not line[1] and not line[2]:
-                continue
-            if type(line[0]) is unicode and line[0].startswith("The most recent"):
-                continue
-            nature = guess_travel(line)
-            if not line[0]:
-                line[0] = cv['travelData'][idx-1][0] if idx > 0 else None
-            if not line[1]:
-                line[1] = cv['travelData'][idx-1][1] if idx > 0 else None
-            # print ' | '.join(unicode(i) for i in (cv['id'], line[0], line[1], line[2], nature))
-            travelSheet.append((cv['id'], line[0], line[1], line[2], nature))
-        print "Inserted travel data for", cv['id'], name
+    print "saving into out%s.xlsx...." % sys.argv[1]
+    outwb.save("out%s.xlsx" % sys.argv[1])
 
-outwb.save("out.xlsx")
+
+if __name__ == "__main__":
+    main()
